@@ -1,4 +1,4 @@
-def aggregate_orders_by_levels_optimized(orders, current_price, is_asks=True):
+def aggregate_orders_by_levels_medium(orders, current_price, is_asks=True):
     # Předpočítat level ranges pouze jednou při inicializaci
     level_ranges = ([
         {"min": 0, "max": 0.25, "label": "0-0.25%"},

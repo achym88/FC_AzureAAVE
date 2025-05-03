@@ -9,7 +9,7 @@ import os
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "Shared_Functions"))
-from fce_aggregate_orders_Medium import aggregate_orders_by_levels
+from fce_aggregate_orders_Medium import aggregate_orders_by_levels_medium
 
 CONTAINER_NAME = "ethereum"
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
@@ -52,8 +52,8 @@ async def get_binance_liquidity(symbol):
                 processed_asks = [[float(ask[0]), float(ask[1]) * float(ask[0])] for ask in orderbook_data['asks']]
                 processed_bids = [[float(bid[0]), float(bid[1]) * float(bid[0])] for bid in orderbook_data['bids']]
 
-                aggregated_asks = aggregate_orders_by_levels(processed_asks, current_price, True)
-                aggregated_bids = aggregate_orders_by_levels(processed_bids, current_price, False)
+                aggregated_asks = aggregate_orders_by_levels_medium(processed_asks, current_price, True)
+                aggregated_bids = aggregate_orders_by_levels_medium(processed_bids, current_price, False)
 
                 return {
                     'price': current_price,
@@ -73,12 +73,12 @@ async def aggregate_usd_liquidity(usdt_data, usdc_data):
     all_asks = usdt_data['orderbook']['asks'] + usdc_data['orderbook']['asks']
     all_bids = usdt_data['orderbook']['bids'] + usdc_data['orderbook']['bids']
 
-    aggregated_asks = aggregate_orders_by_levels(
+    aggregated_asks = aggregate_orders_by_levels_medium(
         [[ask[0], ask[1]] for ask in all_asks],
         price,
         True
     )
-    aggregated_bids = aggregate_orders_by_levels(
+    aggregated_bids = aggregate_orders_by_levels_medium(
         [[bid[0], bid[1]] for bid in all_bids],
         price,
         False
