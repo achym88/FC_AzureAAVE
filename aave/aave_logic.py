@@ -1,8 +1,6 @@
-import azure.functions as func
 import logging
 import asyncio
 import aiohttp
-import json
 import pandas as pd
 from datetime import datetime, date
 from azure.storage.blob.aio import BlobServiceClient
@@ -11,14 +9,11 @@ import os
 import sys
 
 # Přidání cesty ke sdíleným funkcím
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "shared_functions"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "Shared_Functions"))
 from fce_aggregate_orders_by_levels import aggregate_orders_by_levels
 
-# Konstanty
 CONTAINER_NAME = "aave"
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
-
-# Globální inicializace BlobServiceClient
 BLOB_SERVICE_CLIENT = None
 
 async def initialize_blob_client():
@@ -36,7 +31,6 @@ def get_csv_filename():
 def format_data_for_csv(liquidity_data):
     rows = []
     timestamp = datetime.utcnow().strftime(TIMESTAMP_FORMAT)
-
     level_mapping = {
         "0-0.5%": 1,
         "0.5-1.5%": 2,
@@ -45,11 +39,9 @@ def format_data_for_csv(liquidity_data):
         "-0.5 to -1.5%": -2,
         "-1.5 to -3%": -3
     }
-
     for exchange_data in liquidity_data:
         exchange = exchange_data['exchange']
         price = exchange_data['price']
-
         for ask_price, ask_quantity, ask_range in exchange_data['orderbook']['asks']:
             rows.append({
                 'timestamp': timestamp,
@@ -61,7 +53,6 @@ def format_data_for_csv(liquidity_data):
                 'price': ask_price,
                 'quantity_usd': ask_quantity
             })
-
         for bid_price, bid_quantity, bid_range in exchange_data['orderbook']['bids']:
             rows.append({
                 'timestamp': timestamp,
@@ -73,25 +64,7 @@ def format_data_for_csv(liquidity_data):
                 'price': bid_price,
                 'quantity_usd': bid_quantity
             })
-
     return pd.DataFrame(rows)
-
-app = func.FunctionApp()
-
-@app.schedule(schedule="0 */15 * * * *", arg_name="timer")
-async def aave_liquidity_storage(timer: func.TimerRequest) -> None:
-    logging.info('Azure Function triggered for AAVE liquidity storage by timer.')
-    start_time = datetime.utcnow()
-
-    try:
-        await initialize_blob_client()
-        liquidity_data = await fetch_liquidity_data()
-        await save_to_blob_storage(liquidity_data)
-        execution_time = (datetime.utcnow() - start_time).total_seconds()
-        logging.info(f"Total execution time: {execution_time} seconds")
-        logging.info("Liquidity data successfully saved to Blob Storage")
-    except Exception as e:
-        logging.error(f"Error in aave_liquidity_storage function: {str(e)}")
 
 async def fetch_liquidity_data():
     tasks = [
@@ -108,7 +81,6 @@ async def save_to_blob_storage(data):
     try:
         df = format_data_for_csv(data)
         filename = get_csv_filename()
-
         async with BLOB_SERVICE_CLIENT.get_container_client(CONTAINER_NAME) as container_client:
             try:
                 blob_client = container_client.get_blob_client(filename)
@@ -116,12 +88,10 @@ async def save_to_blob_storage(data):
                 existing_content = await existing_data.content_as_text()
                 existing_df = pd.read_csv(StringIO(existing_content))
                 df = pd.concat([existing_df, df], ignore_index=True)
-            except Exception as e:
+            except Exception:
                 logging.info(f"Creating new file {filename}")
-
             csv_data = df.to_csv(index=False)
             await container_client.upload_blob(name=filename, data=csv_data, overwrite=True)
-
             execution_time = (datetime.utcnow() - start_time).total_seconds()
             logging.info(f"CSV storage operation time: {execution_time} seconds")
             logging.info(f"Data successfully appended to CSV: {filename}")
@@ -139,10 +109,8 @@ async def get_binance_liquidity():
                 best_bid = float(orderbook_data['bids'][0][0])
                 best_ask = float(orderbook_data['asks'][0][0])
                 current_price = (best_bid + best_ask) / 2
-
                 aggregated_asks = aggregate_orders_by_levels(orderbook_data['asks'], current_price, True)
                 aggregated_bids = aggregate_orders_by_levels(orderbook_data['bids'], current_price, False)
-
                 return {
                     'exchange': 'Binance',
                     'price': current_price,
@@ -168,10 +136,8 @@ async def get_okx_liquidity():
                 best_bid = float(bids[0][0])
                 best_ask = float(asks[0][0])
                 current_price = (best_bid + best_ask) / 2
-
                 aggregated_asks = aggregate_orders_by_levels(asks, current_price, True)
                 aggregated_bids = aggregate_orders_by_levels(bids, current_price, False)
-
                 return {
                     'exchange': 'OKX',
                     'price': current_price,
@@ -197,10 +163,8 @@ async def get_bybit_liquidity():
                 best_bid = float(bids[0][0])
                 best_ask = float(asks[0][0])
                 current_price = (best_bid + best_ask) / 2
-
                 aggregated_asks = aggregate_orders_by_levels(asks, current_price, True)
                 aggregated_bids = aggregate_orders_by_levels(bids, current_price, False)
-
                 return {
                     'exchange': 'Bybit',
                     'price': current_price,
@@ -212,3 +176,16 @@ async def get_bybit_liquidity():
     except Exception as e:
         logging.error(f"Bybit API error: {e}")
         return None
+
+async def aave_liquidity_storage_impl(timer):
+    logging.info('Azure Function triggered for AAVE liquidity storage by timer.')
+    start_time = datetime.utcnow()
+    try:
+        await initialize_blob_client()
+        liquidity_data = await fetch_liquidity_data()
+        await save_to_blob_storage(liquidity_data)
+        execution_time = (datetime.utcnow() - start_time).total_seconds()
+        logging.info(f"Total execution time: {execution_time} seconds")
+        logging.info("Liquidity data successfully saved to Blob Storage")
+    except Exception as e:
+        logging.error(f"Error in aave_liquidity_storage function: {str(e)}")
