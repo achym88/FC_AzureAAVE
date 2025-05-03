@@ -10,7 +10,7 @@ import sys
 
 # Přidání cesty ke sdíleným funkcím
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "Shared_Functions"))
-from fce_aggregate_orders_by_levels import aggregate_orders_by_levels
+from fce_aggregate_orders_Large import aggregate_orders_by_levels
 
 CONTAINER_NAME = "aave"
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
@@ -101,7 +101,7 @@ async def save_to_blob_storage(data):
 
 async def get_binance_liquidity():
     orderbook_url = "https://api.binance.com/api/v3/depth"
-    params = {"symbol": "AAVEUSDT", "limit": 500}
+    params = {"symbol": "AAVEUSDT", "limit": 2000}
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(orderbook_url, params=params) as response:

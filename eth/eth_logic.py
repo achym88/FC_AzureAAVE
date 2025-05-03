@@ -9,7 +9,7 @@ import os
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "Shared_Functions"))
-from fce_aggregate_orders_by_levels import aggregate_orders_by_levels
+from fce_aggregate_orders_Medium import aggregate_orders_by_levels
 
 CONTAINER_NAME = "ethereum"
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
@@ -96,12 +96,12 @@ def format_data_for_csv(liquidity_data, btc_usd_price=None):
     rows = []
     timestamp = datetime.utcnow().strftime(TIMESTAMP_FORMAT)
     level_mapping = {
-        "0-0.5%": 1,
-        "0.5-1.5%": 2,
-        "1.5-3%": 3,
-        "0 to -0.5%": -1,
-        "-0.5 to -1.5%": -2,
-        "-1.5 to -3%": -3
+        "0-0.25%": 1,
+        "0.25-0.6%": 2,
+        "0.6-1.5%": 3,
+        "0 to -0.25%": -1,
+        "-0.25 to -0.6%": -2,
+        "-0.6 to -1.5%": -3
     }
 
     for quote_asset, exchange_data in liquidity_data.items():
