@@ -38,7 +38,7 @@ async def get_binance_price(symbol):
         logging.error(f"Error fetching {symbol} price: {e}")
         return None
 
-async def get_binance_volume(symbol, minutes=5):
+async def get_binance_volume(symbol, minutes=3):
     """Získá objem obchodů za posledních X minut"""
     trades_url = "https://api.binance.com/api/v3/trades"
     params = {
@@ -51,10 +51,10 @@ async def get_binance_volume(symbol, minutes=5):
             async with session.get(trades_url, params=params) as response:
                 trades = await response.json()
 
-                # Získat časovou hranici (5 minut zpět)
+                # Získat časovou hranici (3 minut zpět)
                 time_threshold = datetime.utcnow().timestamp() * 1000 - (minutes * 60 * 1000)
 
-                # Filtrovat a sečíst objemy obchodů za posledních 5 minut
+                # Filtrovat a sečíst objemy obchodů za posledních 3 minut
                 recent_volume = sum(
                     float(trade['price']) * float(trade['qty'])
                     for trade in trades
@@ -84,7 +84,7 @@ async def get_all_volumes():
 
 async def get_binance_liquidity(symbol):
     orderbook_url = "https://api.binance.com/api/v3/depth"
-    params = {"symbol": symbol, "limit": 500}
+    params = {"symbol": symbol, "limit": 2000}
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(orderbook_url, params=params) as response:
@@ -150,9 +150,9 @@ def format_data_for_csv(liquidity_data, btc_usd_price=None):
         price = exchange_data['price']
         # Vždy získáme objem v USD
         if quote_asset == 'USD':
-            volume_5min_usd = exchange_data.get('volume_5min', 0)
+            volume_3min_usd = exchange_data.get('volume_3min', 0)
         else:
-            volume_5min_usd = exchange_data.get('volume_5min_usd', 0)
+            volume_3min_usd = exchange_data.get('volume_3min_usd', 0)
 
         for ask_price, ask_value, ask_range in exchange_data['orderbook']['asks']:
             value_usd = ask_value if quote_asset == 'USD' else ask_value * btc_usd_price
@@ -165,7 +165,7 @@ def format_data_for_csv(liquidity_data, btc_usd_price=None):
                 'level_range': ask_range,
                 'price': ask_price,
                 'value_usd': value_usd,
-                'volume_5min_usd': volume_5min_usd
+                'volume_3min_usd': volume_3min_usd
             })
         for bid_price, bid_value, bid_range in exchange_data['orderbook']['bids']:
             value_usd = bid_value if quote_asset == 'USD' else bid_value * btc_usd_price
@@ -178,7 +178,7 @@ def format_data_for_csv(liquidity_data, btc_usd_price=None):
                 'level_range': bid_range,
                 'price': bid_price,
                 'value_usd': value_usd,
-                'volume_5min_usd': volume_5min_usd
+                'volume_3min_usd': volume_3min_usd
             })
     return pd.DataFrame(rows)
 
@@ -234,12 +234,12 @@ async def eth_liquidity_storage_impl(timer):
             combined_data = {
                 'USD': {
                     **usd_data,
-                    'volume_5min': volumes['USD']
+                    'volume_3min': volumes['USD']
                 },
                 'BTC': {
                     **btc_data,
-                    'volume_5min': volumes['BTC'],
-                    'volume_5min_usd': volumes['BTC_in_USD']
+                    'volume_3min': volumes['BTC'],
+                    'volume_3min_usd': volumes['BTC_in_USD']
                 }
             }
 
