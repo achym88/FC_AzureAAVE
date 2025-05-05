@@ -2,12 +2,10 @@ def aggregate_orders_by_levels_medium(orders, current_price, is_asks=True):
     # Předpočítat level ranges pouze jednou při inicializaci
     level_ranges = ([
         {"min": 0, "max": 0.25, "label": "0-0.25%"},
-        {"min": 0.25, "max": 0.6, "label": "0.25-0.6%"},
-        {"min": 0.6, "max": 1.5, "label": "0.6-1.5%"}
+        {"min": 0.25, "max": 1, "label": "0.25-1%"}
     ] if is_asks else [
         {"min": -0.25, "max": 0, "label": "0 to -0.25%"},
-        {"min": -0.6, "max": -0.25, "label": "-0.25 to -0.6%"},
-        {"min": -1.5, "max": -0.6, "label": "-0.6 to -1.5%"}
+        {"min": -1, "max": -0.25, "label": "-0.25 to -1%"}
     ])
 
     # Předalokace slovníku
@@ -24,17 +22,13 @@ def aggregate_orders_by_levels_medium(orders, current_price, is_asks=True):
         if is_asks:
             if 0 <= price_diff_percent <= 0.25:
                 aggregated[level_ranges[0]["label"]].append((price_float, quantity_usd))
-            elif 0.25 < price_diff_percent <= 0.6:
+            elif 0.25 < price_diff_percent <= 1:
                 aggregated[level_ranges[1]["label"]].append((price_float, quantity_usd))
-            elif 0.6 < price_diff_percent <= 1.5:
-                aggregated[level_ranges[2]["label"]].append((price_float, quantity_usd))
         else:
             if -0.25 <= price_diff_percent < 0:
                 aggregated[level_ranges[0]["label"]].append((price_float, quantity_usd))
-            elif -0.6 <= price_diff_percent < -0.25:
+            elif -1 <= price_diff_percent < -0.25:
                 aggregated[level_ranges[1]["label"]].append((price_float, quantity_usd))
-            elif -1.5 <= price_diff_percent < -0.6:
-                aggregated[level_ranges[2]["label"]].append((price_float, quantity_usd))
 
     result = []
     price_func = min if is_asks else max

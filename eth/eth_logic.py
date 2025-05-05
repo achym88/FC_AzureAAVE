@@ -38,6 +38,50 @@ async def get_binance_price(symbol):
         logging.error(f"Error fetching {symbol} price: {e}")
         return None
 
+async def get_binance_volume(symbol, minutes=5):
+    """Získá objem obchodů za posledních X minut"""
+    trades_url = "https://api.binance.com/api/v3/trades"
+    params = {
+        "symbol": symbol,
+        "limit": 1000  # maximální limit pro jeden request
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(trades_url, params=params) as response:
+                trades = await response.json()
+
+                # Získat časovou hranici (5 minut zpět)
+                time_threshold = datetime.utcnow().timestamp() * 1000 - (minutes * 60 * 1000)
+
+                # Filtrovat a sečíst objemy obchodů za posledních 5 minut
+                recent_volume = sum(
+                    float(trade['price']) * float(trade['qty'])
+                    for trade in trades
+                    if float(trade['time']) > time_threshold
+                )
+
+                return recent_volume
+    except Exception as e:
+        logging.error(f"Error fetching {symbol} volume: {e}")
+        return None
+
+async def get_all_volumes():
+    """Získá všechny potřebné objemy obchodů"""
+    volumes = await asyncio.gather(
+        get_binance_volume("ETHUSDT"),
+        get_binance_volume("ETHUSDC"),
+        get_binance_volume("ETHBTC")
+    )
+
+    if all(v is not None for v in volumes):
+        usdt_volume, usdc_volume, btc_volume = volumes
+        return {
+            'USD': usdt_volume + usdc_volume,  # Součet USDT a USDC objemů
+            'BTC': btc_volume  # BTC objem
+        }
+    return None
+
 async def get_binance_liquidity(symbol):
     orderbook_url = "https://api.binance.com/api/v3/depth"
     params = {"symbol": symbol, "limit": 500}
@@ -97,15 +141,19 @@ def format_data_for_csv(liquidity_data, btc_usd_price=None):
     timestamp = datetime.utcnow().strftime(TIMESTAMP_FORMAT)
     level_mapping = {
         "0-0.25%": 1,
-        "0.25-0.6%": 2,
-        "0.6-1.5%": 3,
+        "0.25-1%": 2,
         "0 to -0.25%": -1,
-        "-0.25 to -0.6%": -2,
-        "-0.6 to -1.5%": -3
+        "-0.25 to -1%": -2
     }
 
     for quote_asset, exchange_data in liquidity_data.items():
         price = exchange_data['price']
+        # Vždy získáme objem v USD
+        if quote_asset == 'USD':
+            volume_5min_usd = exchange_data.get('volume_5min', 0)
+        else:
+            volume_5min_usd = exchange_data.get('volume_5min_usd', 0)
+
         for ask_price, ask_value, ask_range in exchange_data['orderbook']['asks']:
             value_usd = ask_value if quote_asset == 'USD' else ask_value * btc_usd_price
             rows.append({
@@ -116,7 +164,8 @@ def format_data_for_csv(liquidity_data, btc_usd_price=None):
                 'level_number': level_mapping[ask_range],
                 'level_range': ask_range,
                 'price': ask_price,
-                'value_usd': value_usd
+                'value_usd': value_usd,
+                'volume_5min_usd': volume_5min_usd
             })
         for bid_price, bid_value, bid_range in exchange_data['orderbook']['bids']:
             value_usd = bid_value if quote_asset == 'USD' else bid_value * btc_usd_price
@@ -128,7 +177,8 @@ def format_data_for_csv(liquidity_data, btc_usd_price=None):
                 'level_number': level_mapping[bid_range],
                 'level_range': bid_range,
                 'price': bid_price,
-                'value_usd': value_usd
+                'value_usd': value_usd,
+                'volume_5min_usd': volume_5min_usd
             })
     return pd.DataFrame(rows)
 
@@ -165,21 +215,32 @@ async def eth_liquidity_storage_impl(timer):
     try:
         await initialize_blob_client()
 
-        # Paralelní volání všech API
-        usdt_data, usdc_data, btc_data, btc_usd_price = await asyncio.gather(
+        # Paralelní volání všech API včetně objemů
+        usdt_data, usdc_data, btc_data, btc_usd_price, volumes = await asyncio.gather(
             get_binance_liquidity("ETHUSDT"),
             get_binance_liquidity("ETHUSDC"),
             get_binance_liquidity("ETHBTC"),
-            get_binance_price("BTCUSDT")
+            get_binance_price("BTCUSDT"),
+            get_all_volumes()
         )
 
         # Agregace USD dat
         usd_data = await aggregate_usd_liquidity(usdt_data, usdc_data)
 
-        if usd_data and btc_data and btc_usd_price:
+        if usd_data and btc_data and btc_usd_price and volumes:
+            # Přepočet BTC objemu na USD
+            volumes['BTC_in_USD'] = volumes['BTC'] * btc_usd_price
+
             combined_data = {
-                'USD': usd_data,
-                'BTC': btc_data
+                'USD': {
+                    **usd_data,
+                    'volume_5min': volumes['USD']
+                },
+                'BTC': {
+                    **btc_data,
+                    'volume_5min': volumes['BTC'],
+                    'volume_5min_usd': volumes['BTC_in_USD']
+                }
             }
 
             await save_to_blob_storage(combined_data, btc_usd_price)
